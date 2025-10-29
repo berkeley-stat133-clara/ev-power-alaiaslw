@@ -33,7 +33,8 @@ You will find the following CSV files in your GitHub repo:
 |                                             | -   `total_energy_use_2023.csv`          |                   |
 +---------------------------------------------+------------------------------------------+-------------------+
 | EV Registrations by State                   | -   `ev-registrations-by_state_2023.csv` | 2023              |
-+---------------------------------------------+------------------------------------------+-------------------+
++---------------------------------------------+------------------------------------------+-------------------+a
+
 
 ### **Part 1: Defining Research Questions**
 
@@ -41,14 +42,70 @@ Brainstorm some questions about the datasets that you would like to answer throu
 
 -   *Examples*: How has the share of renewable energy changed from 2021–2023 across states? What is the share of electricity that comes from clean sources by state? Do states with higher renewable usage have lower average electricity prices? Are EV registrations concentrated in states with cleaner energy mixes? Which regions show the fastest growth in renewable energy?
 
--   You should be able to explore each question using the datasets provided. Try to come up with some creative questions that you are interested in learning the answers to!
+-  Are Electrical vehicles registrations found more in states with a higher  renewable energy?
+- Does the state that use the most energy in 2023 have the least EV registrations in 2023?
+- Did any of total use of energy among the states go down when their EV vehical registration went up in 2023?
 
-### **Part 2: Data Preparation & Cleaning**
+
+
+### **Part 2: Data Preparation & Cleaning** For question - Does the state that uses the most renewable energy in 2023 have the most EV registrations in 2023?
+
 
 Load and clean your datasets to prepare for analysis.
 
--   Use string manipulation to:
+```{r}
+#Load library and data
+library(ggplot2)
+library(maps)
+library(viridis)
+library(scales)
+library(tidyverse)
+library(tidyr)
+library(dplyr)
+ev_2023 <- read.csv("data/ev-registrations-by-state-2023.csv")
+renew_2023 <- read.csv("data/renew-use-2023.csv")
+renew_2023$Renewable_Use_2023 <- suppressWarnings(as.numeric(gsub("[^0-9.]", "", renew_2023$Renewable_Use_2023)))
+renew_2023$State <- toupper(renew_2023$State)
+# Calculate total renewable by state
+renewable_total <- renew_2023 |>
+  group_by(State) %>%
+  summarize(Total_Renewable = sum(Renewable_Use_2023, na.rm = TRUE))
+state_lookup <- data.frame(
+  Full_Name = toupper(c("Alabama", "Alaska", "Arizona", "Arkansas", "California", 
+                        "Colorado", "Connecticut", "Delaware", "District of Columbia",
+                        "Florida", "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana",
+                        "Iowa", "Kansas", "Kentucky", "Louisiana", "Maine", "Maryland",
+                        "Massachusetts", "Michigan", "Minnesota", "Mississippi", "Missouri",
+                        "Montana", "Nebraska", "Nevada", "New Hampshire", "New Jersey",
+                        "New Mexico", "New York", "North Carolina", "North Dakota", "Ohio",
+                        "Oklahoma", "Oregon", "Pennsylvania", "Rhode Island", "South Carolina",
+                        "South Dakota", "Tennessee", "Texas", "Utah", "Vermont", "Virginia",
+                        "Washington", "West Virginia", "Wisconsin", "Wyoming")),
+  Abbrev = c("AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI",
+             "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN",
+             "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH",
+             "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA",
+             "WV", "WI", "WY")
+)
 
+ev_2023 <- ev_2023 %>%
+  rename(State_Full = 1, EV_Count = 2) %>%
+  mutate(
+    EV_Count = as.numeric(gsub("[^0-9]", "", EV_Count)),
+    State_Full = toupper(trimws(State_Full))
+  ) %>%
+  left_join(state_lookup, by = c("State_Full" = "Full_Name"))|>
+  select(State = Abbrev, EV_Count) |>
+  filter(!is.na(State), State != "")
+cat("Top 5 Renewable Energy States:\n")
+print(head(analysis_data %>% select(State, Total_Renewable, EV_Count), 5))
+cat("\nTop 5 EV Registration States:\n")
+top_ev <- analysis_data %>% arrange(desc(EV_Count))
+print(head(top_ev %>% select(State, Total_Renewable, EV_Count), 5))
+
+```
+
+- Use string manipulation to:
     -   Standardize column names
 
     -   Ensure state names are consistent across files
@@ -56,6 +113,14 @@ Load and clean your datasets to prepare for analysis.
 ### **Part 3: Joining / Pivoting Datasets for Analysis**
 
 Combine relevant datasets to explore your research questions. Combine yearly files into single tables as needed.
+
+```{r}
+analysis_data <- left_join(renewable_total, ev_2023, by = "State") %>%
+  filter(State != "US") %>%
+  mutate(EV_per_Renewable = (EV_Count / Total_Renewable) * 100) %>%
+  arrange(desc(Total_Renewable))
+
+```
 
 For each research question, decide which datasets to merge. Document which method you chose and why. To further your analysis, create new variables, such as: percentage of renewable energy out of total energy, ratio of EV registrations to total energy use, etc.
 
@@ -70,6 +135,29 @@ Create a map to support your analysis and visualize your findings:
 -   Can include time based data, showing changes from 2021-2023
 
 -   Ensure maps include titles, legends, and clear labeling
+
+```{r}
+library(ggplot2)
+library(maps)
+library(dplyr)
+library(viridis)
+library(scales)
+
+# US map and join with analysis data
+us_map <- map_data("state")
+analysis_data$region <- tolower(state.name[match(analysis_data$State, state.abb)])
+map_data <- left_join(us_map, analysis_data, by = "region")
+
+# Plot
+ggplot(map_data, aes(long, lat, group = group, fill = Total_Renewable)) +
+  geom_polygon(color = "white", size = 0.2) +
+  scale_fill_viridis(option = "plasma", name = "Renewable Energy", labels = comma) +
+  labs(title = "Clean Energy and Electric Vehicles (2023)",
+       subtitle = "States with higher renewable energy vs EV registrations") +
+  coord_fixed(1.3) +
+  theme_void() +
+  theme(legend.position = "right")
+```
 
 ### **Part 5: Final Deliverable**
 
